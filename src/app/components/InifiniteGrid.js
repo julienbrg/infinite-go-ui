@@ -10,6 +10,7 @@ const InfiniteGrid = () => {
   const isDragging = useRef(false);
   const lastPosition = useRef({ x: 0, y: 0 });
   const dragStartPosition = useRef({ x: 0, y: 0 });
+  const lastTouchDistance = useRef(null);
   const DRAG_THRESHOLD = 5;
 
   const CELL_SIZE = 40;
@@ -21,7 +22,8 @@ const InfiniteGrid = () => {
     const ctx = canvas.getContext('2d');
     
     const drawGrid = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       const startX = Math.floor(-offset.x / (CELL_SIZE * zoom));
       const endX = startX + Math.ceil(canvas.width / (CELL_SIZE * zoom));
@@ -67,6 +69,89 @@ const InfiniteGrid = () => {
 
     return () => window.removeEventListener('resize', handleResize);
   }, [offset, zoom, stones]);
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      isDragging.current = false;
+      const touch = e.touches[0];
+      lastPosition.current = { x: touch.clientX, y: touch.clientY };
+      dragStartPosition.current = { x: touch.clientX, y: touch.clientY };
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      lastTouchDistance.current = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - dragStartPosition.current.x);
+      const deltaY = Math.abs(touch.clientY - dragStartPosition.current.y);
+      
+      if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+        isDragging.current = true;
+      }
+
+      if (isDragging.current) {
+        const moveX = touch.clientX - lastPosition.current.x;
+        const moveY = touch.clientY - lastPosition.current.y;
+        setOffset(prev => ({
+          x: prev.x + moveX,
+          y: prev.y + moveY
+        }));
+        lastPosition.current = { x: touch.clientX, y: touch.clientY };
+      }
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const currentDistance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+
+      if (lastTouchDistance.current !== null) {
+        const delta = currentDistance - lastTouchDistance.current;
+        const zoomFactor = delta > 0 ? 1.1 : 0.9;
+        const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
+        
+        // Calculate center of pinch
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+        
+        // Convert center position to world space before zoom
+        const worldX = (centerX - offset.x) / zoom;
+        const worldY = (centerY - offset.y) / zoom;
+        
+        // Calculate new offset to keep the center position fixed
+        const newOffset = {
+          x: centerX - worldX * newZoom,
+          y: centerY - worldY * newZoom
+        };
+
+        setZoom(newZoom);
+        setOffset(newOffset);
+      }
+      
+      lastTouchDistance.current = currentDistance;
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (e.touches.length === 0) {
+      if (!isDragging.current) {
+        const touch = e.changedTouches[0];
+        handleClick(touch);
+      }
+      isDragging.current = false;
+      lastTouchDistance.current = null;
+    }
+  };
 
   const handleMouseDown = (e) => {
     isDragging.current = false;
@@ -129,19 +214,15 @@ const InfiniteGrid = () => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
-    // Get mouse position relative to canvas
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Convert mouse position to world space before zoom
     const worldX = (mouseX - offset.x) / zoom;
     const worldY = (mouseY - offset.y) / zoom;
 
-    // Calculate new zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
 
-    // Calculate new offset to keep the mouse position fixed
     const newOffset = {
       x: mouseX - worldX * newZoom,
       y: mouseY - worldY * newZoom
@@ -152,7 +233,7 @@ const InfiniteGrid = () => {
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-white">
+    <div className="w-full h-screen overflow-hidden bg-black">
       <canvas
         ref={canvasRef}
         className="touch-none"
@@ -161,6 +242,9 @@ const InfiniteGrid = () => {
         onMouseUp={handleMouseUp}
         onMouseLeave={() => isDragging.current = false}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
     </div>
   );
