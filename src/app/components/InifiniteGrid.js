@@ -21,9 +21,15 @@ const InfiniteGrid = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
-    const drawGrid = () => {
+    const setupCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
       ctx.fillStyle = 'black';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+    };
+    
+    const drawGrid = () => {
+      setupCanvas();
       
       const startX = Math.floor(-offset.x / (CELL_SIZE * zoom));
       const endX = startX + Math.ceil(canvas.width / (CELL_SIZE * zoom));
@@ -32,15 +38,16 @@ const InfiniteGrid = () => {
       
       ctx.beginPath();
       ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1;
       
       for (let x = startX; x <= endX; x++) {
-        const xPos = x * CELL_SIZE * zoom + offset.x;
+        const xPos = Math.floor(x * CELL_SIZE * zoom + offset.x) + 0.5;
         ctx.moveTo(xPos, 0);
         ctx.lineTo(xPos, canvas.height);
       }
       
       for (let y = startY; y <= endY; y++) {
-        const yPos = y * CELL_SIZE * zoom + offset.y;
+        const yPos = Math.floor(y * CELL_SIZE * zoom + offset.y) + 0.5;
         ctx.moveTo(0, yPos);
         ctx.lineTo(canvas.width, yPos);
       }
@@ -58,16 +65,9 @@ const InfiniteGrid = () => {
       });
     };
 
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      drawGrid();
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-
-    return () => window.removeEventListener('resize', handleResize);
+    drawGrid();
+    window.addEventListener('resize', drawGrid);
+    return () => window.removeEventListener('resize', drawGrid);
   }, [offset, zoom, stones]);
 
   const handleTouchStart = (e) => {
@@ -120,15 +120,11 @@ const InfiniteGrid = () => {
         const zoomFactor = delta > 0 ? 1.1 : 0.9;
         const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
         
-        // Calculate center of pinch
         const centerX = (touch1.clientX + touch2.clientX) / 2;
         const centerY = (touch1.clientY + touch2.clientY) / 2;
-        
-        // Convert center position to world space before zoom
         const worldX = (centerX - offset.x) / zoom;
         const worldY = (centerY - offset.y) / zoom;
         
-        // Calculate new offset to keep the center position fixed
         const newOffset = {
           x: centerX - worldX * newZoom,
           y: centerY - worldY * newZoom
@@ -143,14 +139,12 @@ const InfiniteGrid = () => {
   };
 
   const handleTouchEnd = (e) => {
-    if (e.touches.length === 0) {
-      if (!isDragging.current) {
-        const touch = e.changedTouches[0];
-        handleClick(touch);
-      }
-      isDragging.current = false;
-      lastTouchDistance.current = null;
+    if (e.touches.length === 0 && !isDragging.current) {
+      const touch = e.changedTouches[0];
+      handleClick(touch);
     }
+    isDragging.current = false;
+    lastTouchDistance.current = null;
   };
 
   const handleMouseDown = (e) => {
@@ -216,13 +210,10 @@ const InfiniteGrid = () => {
     
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-
     const worldX = (mouseX - offset.x) / zoom;
     const worldY = (mouseY - offset.y) / zoom;
-
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
-
     const newOffset = {
       x: mouseX - worldX * newZoom,
       y: mouseY - worldY * newZoom
@@ -233,10 +224,10 @@ const InfiniteGrid = () => {
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-black">
+    <div className="fixed inset-0 bg-black">
       <canvas
         ref={canvasRef}
-        className="touch-none"
+        className="w-full h-full touch-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
